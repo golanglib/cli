@@ -52,15 +52,21 @@ func TestBoolFlagApply_SetsAllNames(t *testing.T) {
 }
 
 func TestFlagsFromEnv(t *testing.T) {
+	newSetFloat64Slice := func(defaults ...float64) Float64Slice {
+		s := NewFloat64Slice(defaults...)
+		s.hasBeenSet = false
+		return *s
+	}
+
 	newSetIntSlice := func(defaults ...int) IntSlice {
 		s := NewIntSlice(defaults...)
-		s.hasBeenSet = true
+		s.hasBeenSet = false
 		return *s
 	}
 
 	newSetInt64Slice := func(defaults ...int64) Int64Slice {
 		s := NewInt64Slice(defaults...)
-		s.hasBeenSet = true
+		s.hasBeenSet = false
 		return *s
 	}
 
@@ -95,6 +101,9 @@ func TestFlagsFromEnv(t *testing.T) {
 		{"1", 1, &IntFlag{Name: "seconds", EnvVars: []string{"SECONDS"}}, ""},
 		{"1.2", 0, &IntFlag{Name: "seconds", EnvVars: []string{"SECONDS"}}, `could not parse "1.2" as int value for flag seconds: .*`},
 		{"foobar", 0, &IntFlag{Name: "seconds", EnvVars: []string{"SECONDS"}}, `could not parse "foobar" as int value for flag seconds: .*`},
+
+		{"1.0,2", newSetFloat64Slice(1, 2), &Float64SliceFlag{Name: "seconds", EnvVars: []string{"SECONDS"}}, ""},
+		{"foobar", newSetFloat64Slice(), &Float64SliceFlag{Name: "seconds", EnvVars: []string{"SECONDS"}}, `could not parse "\[\]float64{}" as float64 slice value for flag seconds: .*`},
 
 		{"1,2", newSetIntSlice(1, 2), &IntSliceFlag{Name: "seconds", EnvVars: []string{"SECONDS"}}, ""},
 		{"1.2,2", newSetIntSlice(), &IntSliceFlag{Name: "seconds", EnvVars: []string{"SECONDS"}}, `could not parse "1.2,2" as int slice value for flag seconds: .*`},
@@ -1972,6 +1981,71 @@ func TestTimestampFlagApply_Fail_Parse_Wrong_Time(t *testing.T) {
 
 	err := set.Parse([]string{"--time", "2006-01-02T15:04:05Z"})
 	expect(t, err, fmt.Errorf("invalid value \"2006-01-02T15:04:05Z\" for flag -time: parsing time \"2006-01-02T15:04:05Z\" as \"Jan 2, 2006 at 3:04pm (MST)\": cannot parse \"2006-01-02T15:04:05Z\" as \"Jan\""))
+}
+
+type flagDefaultTestCase struct {
+	name    string
+	flag    Flag
+	toParse []string
+	expect  string
+}
+
+func TestFlagDefaultValue(t *testing.T) {
+	cases := []*flagDefaultTestCase{
+		&flagDefaultTestCase{
+			name:    "stringSclice",
+			flag:    &StringSliceFlag{Name: "flag", Value: NewStringSlice("default1", "default2")},
+			toParse: []string{"--flag", "parsed"},
+			expect: `--flag value	(default: "default1", "default2")	(accepts multiple inputs)`,
+		},
+		&flagDefaultTestCase{
+			name:    "float64Sclice",
+			flag:    &Float64SliceFlag{Name: "flag", Value: NewFloat64Slice(1.1, 2.2)},
+			toParse: []string{"--flag", "13.3"},
+			expect: `--flag value	(default: 1.1, 2.2)	(accepts multiple inputs)`,
+		},
+		&flagDefaultTestCase{
+			name:    "int64Sclice",
+			flag:    &Int64SliceFlag{Name: "flag", Value: NewInt64Slice(1, 2)},
+			toParse: []string{"--flag", "13"},
+			expect: `--flag value	(default: 1, 2)	(accepts multiple inputs)`,
+		},
+		&flagDefaultTestCase{
+			name:    "intSclice",
+			flag:    &IntSliceFlag{Name: "flag", Value: NewIntSlice(1, 2)},
+			toParse: []string{"--flag", "13"},
+			expect: `--flag value	(default: 1, 2)	(accepts multiple inputs)`,
+		},
+		&flagDefaultTestCase{
+			name:    "string",
+			flag:    &StringFlag{Name: "flag", Value: "default"},
+			toParse: []string{"--flag", "parsed"},
+			expect: `--flag value	(default: "default")`,
+		},
+		&flagDefaultTestCase{
+			name:    "bool",
+			flag:    &BoolFlag{Name: "flag", Value: true},
+			toParse: []string{"--flag", "false"},
+			expect: `--flag	(default: true)`,
+		},
+		&flagDefaultTestCase{
+			name:    "uint64",
+			flag:    &Uint64Flag{Name: "flag", Value: 1},
+			toParse: []string{"--flag", "13"},
+			expect: `--flag value	(default: 1)`,
+		},
+	}
+	for i, v := range cases {
+		set := flag.NewFlagSet("test", 0)
+		set.SetOutput(ioutil.Discard)
+		_ = v.flag.Apply(set)
+		if err := set.Parse(v.toParse); err != nil {
+			t.Error(err)
+		}
+		if got := v.flag.String(); got != v.expect {
+			t.Errorf("TestFlagDefaultValue %d %s\nexpect:%s\ngot:%s", i, v.name, v.expect, got)
+		}
+	}
 }
 
 func TestTimestampFlagApply_WithDestination(t *testing.T) {

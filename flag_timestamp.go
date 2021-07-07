@@ -114,6 +114,11 @@ func (f *TimestampFlag) GetValue() string {
 	return ""
 }
 
+// IsVisible returns true if the flag is not hidden, otherwise false
+func (f *TimestampFlag) IsVisible() bool {
+	return !f.Hidden
+}
+
 // Apply populates the flag given the flag set and environment
 func (f *TimestampFlag) Apply(set *flag.FlagSet) error {
 	if f.Layout == "" {
@@ -148,7 +153,7 @@ func (f *TimestampFlag) Apply(set *flag.FlagSet) error {
 
 // Timestamp gets the timestamp from a flag name
 func (c *Context) Timestamp(name string) *time.Time {
-	if fs := lookupFlagSet(name, c); fs != nil {
+	if fs := c.lookupFlagSet(name); fs != nil {
 		return lookupTimestamp(name, fs)
 	}
 	return nil
